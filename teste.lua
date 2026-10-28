@@ -1,6 +1,9 @@
 
+-- ARASAKA AUTO RACE | PC + MOBILE
+-- Interface compacta preta e vermelha
 
 local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 
@@ -8,98 +11,33 @@ local LocalPlayer = Players.LocalPlayer
 
 local CONFIG = {
     LobbyWait = 10.1,
-    PrimeiroX = -13369.75,
-    PrimeiroY = 10.12,
-    PesoX = -13802.77,
-    PesoY = 8.10,
+    Primeiro = Vector3.new(-13369.75, 10.12, 0),
+    Peso = Vector3.new(-13802.77, 8.10, 0),
     QuedaBraco = Vector3.new(-14539, 8, -4156),
     Chegada = Vector3.new(-14539, 8, -4158),
     PesoWait = 28,
     ClickDuration = 7,
-    ClickInterval = 0.08,
+    ClickInterval = 0.06,
     Descanso = 5,
 }
 
 local ativo = false
 local ciclo = false
+local connections = {}
 
--- Limpeza da interface anterior
+-- LIMPAR VERSÃO ANTIGA
 pcall(function()
     local old = CoreGui:FindFirstChild("ArasakaAutoRaceGui")
-    if old then
-        old:Destroy()
-    end
+    if old then old:Destroy() end
 end)
 
 local function characterParts()
     local character = LocalPlayer.Character
         or LocalPlayer.CharacterAdded:Wait()
 
-    local root = character:WaitForChild("HumanoidRootPart")
-    local humanoid = character:WaitForChild("Humanoid")
-
-    return character, root, humanoid
-end
-
-local function getRaceWall()
-    local gym = workspace:WaitForChild("StrongbloxianGym")
-    local lobby = gym:WaitForChild("Lobby")
-    local markers = lobby:WaitForChild("Markers")
-
-    return markers:WaitForChild("RaceWall")
-end
-
--- Autoclick de entrada virtual quando disponível.
--- O jogo precisa aceitar essa entrada para registrar a ação.
-local function autoClick(seconds)
-    local deadline = os.clock() + seconds
-    local virtualInput
-
-    local ok, result = pcall(function()
-        return UserInputService:CreateVirtualInput()
-    end)
-
-    if ok then
-        virtualInput = result
-    end
-
-    if not virtualInput then
-        warn("[Arasaka] Entrada virtual indisponível neste executor.")
-        return false
-    end
-
-    local mousePosition = Vector2.new(500, 500)
-
-    while ativo and os.clock() < deadline do
-        local pressed = pcall(function()
-            virtualInput:SendMouseButton(
-                mousePosition,
-                Enum.UserInputType.MouseButton1,
-                true,
-                0
-            )
-        end)
-
-        if pressed then
-            task.wait(0.035)
-
-            pcall(function()
-                virtualInput:SendMouseButton(
-                    mousePosition,
-                    Enum.UserInputType.MouseButton1,
-                    false,
-                    0
-                )
-            end)
-        else
-            warn("[Arasaka] O executor recusou a entrada virtual.")
-            return false
-        end
-
-        task.wait(CONFIG.ClickInterval)
-    end
-
-    return ativo
+    return character,
+        character:WaitForChild("HumanoidRootPart"),
+        character:WaitForChild("Humanoid")
 end
 
 local function esperar(seconds)
@@ -112,56 +50,81 @@ local function esperar(seconds)
     return ativo
 end
 
-local function teleport(root, position)
-    if not ativo or not root or not root.Parent then
-        return false
+local function autoClick(seconds)
+    local deadline = os.clock() + seconds
+    local position = Vector2.new(500, 500)
+
+    while ativo and os.clock() < deadline do
+        local ok, err = pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:Button1Down(position)
+        end)
+
+        if not ok then
+            warn("[Arasaka] Entrada virtual indisponível: "
+                .. tostring(err))
+            return false
+        end
+
+        task.wait(0.035)
+
+        pcall(function()
+            VirtualUser:Button1Up(position)
+        end)
+
+        task.wait(CONFIG.ClickInterval)
     end
 
-    root.CFrame = CFrame.new(position)
-    return true
+    -- Liberar a entrada ao encerrar
+    pcall(function()
+        VirtualUser:Button1Up(position)
+    end)
+
+    return ativo
 end
 
 local function executarCorrida()
     local success, err = pcall(function()
         local _, root, humanoid = characterParts()
-        local raceWall = getRaceWall()
+
+        local gym = workspace:WaitForChild("StrongbloxianGym")
+        local raceWall = gym:WaitForChild("Lobby")
+            :WaitForChild("Markers")
+            :WaitForChild("RaceWall")
 
         if not ativo then return end
 
-        -- 1. Entrada no lobby
+        -- 1. Lobby
         if raceWall:IsA("BasePart") then
             root.CFrame = raceWall.CFrame
         elseif raceWall:IsA("Model") then
             root.CFrame = raceWall:GetPivot()
-        else
-            warn("[Arasaka] RaceWall não é uma peça ou modelo.")
-            return
         end
 
-        -- 2. Espera inicial
+        -- 2. Espera da corrida
         if not esperar(CONFIG.LobbyWait) then return end
 
         local spawnZ = root.Position.Z
 
-        -- 3. Primeiro ponto
-        teleport(root, Vector3.new(
-            CONFIG.PrimeiroX,
-            CONFIG.PrimeiroY,
-            spawnZ
-        ))
-
-        if not esperar(1) then return end
-
-        -- 4. Ponto do peso
-        local peso = Vector3.new(
-            CONFIG.PesoX,
-            CONFIG.PesoY,
+        -- 3. Primeiro teleporte
+        root.CFrame = CFrame.new(
+            CONFIG.Primeiro.X,
+            CONFIG.Primeiro.Y,
             spawnZ
         )
 
-        teleport(root, peso)
+        if not esperar(1) then return end
 
-        -- 5. Mantém posição durante o desafio
+        -- 4. Local do peso
+        local peso = Vector3.new(
+            CONFIG.Peso.X,
+            CONFIG.Peso.Y,
+            spawnZ
+        )
+
+        root.CFrame = CFrame.new(peso)
+
+        -- 5. Permanecer no peso
         local deadline = os.clock() + CONFIG.PesoWait
 
         while ativo and os.clock() < deadline do
@@ -176,58 +139,48 @@ local function executarCorrida()
         for _ = 1, 2 do
             if not ativo then return end
 
-            pcall(function()
-                humanoid:ChangeState(
-                    Enum.HumanoidStateType.Jumping
-                )
-            end)
+            humanoid:ChangeState(
+                Enum.HumanoidStateType.Jumping
+            )
 
             task.wait(0.3)
         end
 
         -- 7. Primeiro autoclick
-        if not autoClick(CONFIG.ClickDuration) then
-            warn("[Arasaka] Primeiro autoclick não foi concluído.")
-            return
-        end
+        if not autoClick(CONFIG.ClickDuration) then return end
 
         -- 8. Queda de braço
-        teleport(root, CONFIG.QuedaBraco)
+        root.CFrame = CFrame.new(CONFIG.QuedaBraco)
 
         -- 9. Espera obrigatória
         if not esperar(3) then return end
 
         -- 10. Segundo autoclick
-        if not autoClick(CONFIG.ClickDuration) then
-            warn("[Arasaka] Segundo autoclick não foi concluído.")
-            return
-        end
+        if not autoClick(CONFIG.ClickDuration) then return end
 
-        -- 11. Chegada
-        teleport(root, CONFIG.Chegada)
+        -- 11. Linha de chegada
+        root.CFrame = CFrame.new(CONFIG.Chegada)
 
-        esperar(0.5)
-
-        if ativo then
-            print("[Arasaka] Ciclo concluído.")
+        if esperar(0.5) then
+            print("[Arasaka] Ciclo concluído!")
         end
     end)
 
     if not success then
-        warn("[Arasaka] Erro no ciclo: " .. tostring(err))
+        warn("[Arasaka] Erro: " .. tostring(err))
     end
 end
 
--- Interface
+-- INTERFACE
 local gui = Instance.new("ScreenGui")
 gui.Name = "ArasakaAutoRaceGui"
 gui.ResetOnSpawn = false
 
-pcall(function()
+local parentOK = pcall(function()
     gui.Parent = CoreGui
 end)
 
-if not gui.Parent then
+if not parentOK or not gui.Parent then
     gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 end
 
@@ -260,11 +213,11 @@ button.Font = Enum.Font.SourceSansBold
 button.Active = true
 button.Parent = frame
 
--- Arrastar com mouse ou toque
+-- ARRASTAR: MOUSE E TOUCH
 local dragging = false
 local dragStart
 local startPosition
-local activeInput
+local dragInput
 
 frame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -273,28 +226,24 @@ frame.InputBegan:Connect(function(input)
         dragging = true
         dragStart = input.Position
         startPosition = frame.Position
-        activeInput = input
 
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 dragging = false
-                activeInput = nil
             end
         end)
     end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if not dragging then return end
+frame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
 
-    local isMouseMove =
-        input.UserInputType == Enum.UserInputType.MouseMovement
-
-    local isTouchMove =
-        input.UserInputType == Enum.UserInputType.Touch
-        and activeInput == input
-
-    if isMouseMove or isTouchMove then
+connections.drag = UserInputService.InputChanged:Connect(function(input)
+    if dragging and input == dragInput then
         local delta = input.Position - dragStart
 
         frame.Position = UDim2.new(
@@ -306,7 +255,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-local function atualizarBotao()
+local function atualizarInterface()
     if ativo then
         frame.BackgroundColor3 = Color3.fromRGB(35, 10, 10)
         button.TextColor3 = Color3.fromRGB(255, 70, 70)
@@ -320,7 +269,7 @@ end
 
 button.Activated:Connect(function()
     ativo = not ativo
-    atualizarBotao()
+    atualizarInterface()
 
     if ativo and not ciclo then
         ciclo = true
