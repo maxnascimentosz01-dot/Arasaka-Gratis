@@ -1,5 +1,4 @@
--- ARASAKA AUTO RACE | PC + MOBILE
--- Interface compacta preta e vermelha
+
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
@@ -47,8 +46,16 @@ end
 local function autoClick(seconds)
     local camera = workspace.CurrentCamera
     local viewport = camera.ViewportSize
-    local x = viewport.X / 2
-    local y = viewport.Y / 2
+
+    -- Posição embaixo do símbolo do Roblox (canto superior esquerdo)
+    local x = 42
+    local y = 58
+
+    -- Ajuste automático caso a tela seja muito pequena (mobile)
+    if viewport.X < 500 then
+        x = 32
+        y = 48
+    end
 
     local deadline = os.clock() + seconds
     while ativo and os.clock() < deadline do
@@ -252,4 +259,4 @@ button.Activated:Connect(function()
     end
 end)
 
-print("[Arasaka] Auto Race carregado (Mobile Compatible).")
+print("[Arasaka] Auto Race carregado (clique embaixo do ícone do Roblox).")
