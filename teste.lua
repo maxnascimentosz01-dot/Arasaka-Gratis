@@ -1,7 +1,4 @@
 
--- ARASAKA AUTO RACE | PC + MOBILE
--- Interface compacta preta e vermelha
-
 local Players = game:GetService("Players")
 local VirtualUser = game:GetService("VirtualUser")
 local UserInputService = game:GetService("UserInputService")
